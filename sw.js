@@ -1,6 +1,6 @@
 // Service worker: app boleh dibuka tanpa internet, dan auto ambil versi baru bila online.
 // Tukar VERSION setiap kali upload fail baru supaya cache lama dibuang.
-const VERSION = 'v3.0.0';
+const VERSION = 'v4.0.1';
 const CACHE = 'laporan-harian-' + VERSION;
 const SHELL = [
   './',

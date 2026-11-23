@@ -155,6 +155,10 @@
   button.add-slot { border-style: dashed; border-color: var(--field-line); color: var(--ink-soft); padding: 6px 12px; font-size: 13px; }
   @media (max-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } .grid .span2, .grid .span3 { grid-column: 1 / -1; } }
   .hint { font-size: 12px; color: var(--ink-soft); margin-top: 3px; }
+  /* v4: deadline wajib untuk job */
+  input.missing { border-color: var(--mark); box-shadow: 0 0 0 3px var(--mark-bg); }
+  .lbl .req { color: var(--mark); font-weight: 600; }
+  .stale.block { background: var(--mark-bg); color: var(--mark); border-radius: 6px; padding: 8px 10px; font-weight: 500; }
   .empty { color: var(--ink-soft); padding: 14px; border: 1px dashed var(--field-line); text-align: center; }
 
   /* Perancangan */
@@ -290,10 +294,6 @@
       <h2>Tugasan <button class="primary" id="addTask" type="button">+ Tambah tugasan</button></h2>
       <div id="tasks"></div>
       <datalist id="jobNames"></datalist>
-      <datalist id="categories">
-        <option value="DRAFTING"><option value="SEMAKAN"><option value="LAPANGAN">
-        <option value="PENTADBIRAN"><option value="MESYUARAT"><option value="LATIHAN">
-      </datalist>
     </section>
 
     <section class="panel">
@@ -363,7 +363,7 @@
   </aside>
 </div>
 
-<div class="wrap"><div class="version" id="versionInfo">Laporan Harian v3.0</div></div>
+<div class="wrap"><div class="version" id="versionInfo">Laporan Harian v4.0.1</div></div>
 
 <div class="mobile-bar">
   <button type="button" class="primary" id="mGenerate">Jana laporan</button>
@@ -500,8 +500,7 @@
       const masa = masaStr(t);
 
       if (isJob(t)) {
-        const tick = t.status === 'siap' ? ' ✅' : '';
-        subs.forEach(s => L.push(`* ${U(s)}${tick}`));
+        subs.forEach(s => L.push(`* ${U(s)}`));
         if (subs.length) L.push('');
         if (t.category) L.push(`CATEGORY: ${U(t.category)}`);
         if (t.progress !== '') L.push(`PROGRESS: ${t.progress}%`);
@@ -557,6 +556,27 @@
     return el;
   }
 
+  // v4: job yang tiada deadline
+  let cubaJana = false;
+  const tiadaDeadline = () => activeTasks().filter(t => isJob(t) && !t.deadline);
+
+  function deadlineField(t) {
+    const el = inputFor(t, 'deadline', 'date');
+    el.dataset.task = t.id;
+    if (cubaJana && isJob(t) && t.nama.trim() && !t.deadline) el.classList.add('missing');
+    el.addEventListener('input', () => {
+      el.classList.toggle('missing', cubaJana && isJob(t) && !t.deadline);
+      if (cubaJana && !tiadaDeadline().length) { $('stale').textContent = ''; $('stale').classList.remove('block'); }
+    });
+    const f = field('Deadline', el);
+    if (isJob(t)) {
+      const req = document.createElement('span');
+      req.className = 'req'; req.textContent = ' *';
+      f.querySelector('.lbl').append(req);
+    }
+    return f;
+  }
+
   function renderTasks() {
     const box = $('tasks');
     box.textContent = '';
@@ -587,15 +607,15 @@
       g.className = 'grid';
       g.append(
         field('Sub-tugasan (satu baris satu item)', inputFor(t, 'sub', 'textarea', { rows: 2, placeholder: 'Pelan Seksyen 8' }), 'span3'),
-        field('Category', inputFor(t, 'category', 'text', { placeholder: 'DRAFTING', list: 'categories' })),
+        field('Category', inputFor(t, 'category', 'text', { placeholder: 'Contoh: DRAFTING', autocomplete: 'off' })),
         field('Progress', selectFor(t, 'progress', PROGRESS.map(p => [p, p === '' ? '—' : p + '%']))),
         field('Status', selectFor(t, 'status', [['', '—'], ...Object.entries(STATUS).map(([k, v]) => [k, v.label])])),
-        field('Deadline (jika ada)', inputFor(t, 'deadline', 'date')),
+        deadlineField(t),
         slotsFor(t)
       );
       const hint = document.createElement('div');
       hint.className = 'hint';
-      hint.textContent = 'Kosongkan category, progress, status dan deadline untuk aktiviti biasa (contoh: Perintis AI). Laporan cuma tunjuk masa.';
+      hint.textContent = 'Job (ada category, progress atau status) wajib ada deadline. Untuk aktiviti biasa (contoh: Perintis AI), kosongkan semua tu dan isi masa sahaja.';
 
       card.append(head, g, hint);
       box.append(card);
@@ -729,8 +749,27 @@
   $('addPlan').addEventListener('click', addPlan);
   $('planInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addPlan(); } });
 
+  const jana = { ok: false };
   $('generate').addEventListener('click', () => {
-    if (!state.nama.trim()) { toast(''); $('stale').textContent = 'Isi nama dulu di bahagian atas.'; $('nama').focus(); return; }
+    $('stale').classList.remove('block');
+    if (!state.nama.trim()) { toast(''); $('stale').textContent = 'Isi nama dulu di bahagian atas.'; $('nama').focus(); jana.ok = false; return; }
+
+    // v4: tolak jana kalau ada job tanpa deadline
+    const kurang = tiadaDeadline();
+    if (kurang.length) {
+      cubaJana = true;
+      renderTasks();
+      const senarai = kurang.map(t => `${state.tasks.indexOf(t) + 1}. ${t.nama.trim()}`).join(', ');
+      $('stale').textContent = `Laporan tak dapat dijana. Isi deadline untuk: ${senarai}`;
+      $('stale').classList.add('block');
+      const first = document.querySelector(`input[data-task="${kurang[0].id}"]`);
+      if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); setTimeout(() => first.focus(), 300); }
+      jana.ok = false;
+      return;
+    }
+    cubaJana = false;
+    jana.ok = true;
+
     const text = janaTeks();
     setOutput(text);
     state.history[state.tarikh] = text;
@@ -812,7 +851,7 @@
   });
   $('mGenerate').addEventListener('click', () => {
     $('generate').click();
-    if ($('output').value) $('output').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (jana.ok) $('output').scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
   $('mCopy').addEventListener('click', () => $('copy').click());
 
@@ -857,7 +896,7 @@
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then(ok => { if (!ok) navigator.storage.persist().catch(() => {}); }).catch(() => {});
   }
-  if (standalone) $('versionInfo').textContent = 'Laporan Harian v3.0 · app';
+  if (standalone) $('versionInfo').textContent = 'Laporan Harian v4.0.1 · app';
 
   // ---------- INIT ----------
   if (!storageOK) $('storageWarn').hidden = false;
