@@ -270,7 +270,7 @@
     <div>
       <div class="company">JURUKUR MAHABOB &amp; CO SDN BHD</div>
       <h1>LAPORAN HARIAN</h1>
-      <div class="sub">Versi 3.0 · Boleh dipasang dalam phone dan guna tanpa internet.</div>
+      <div class="sub">Versi <span class="appVer"></span> · Boleh dipasang dalam phone dan guna tanpa internet.</div>
     </div>
     <div class="brand-fields">
       <label><span class="cell-label">NAMA</span><input id="nama" placeholder="ARINA" autocomplete="name"></label>
@@ -363,7 +363,7 @@
   </aside>
 </div>
 
-<div class="wrap"><div class="version" id="versionInfo">Laporan Harian v4.0.1</div></div>
+<div class="wrap"><div class="version" id="versionInfo">Laporan Harian v<span class="appVer"></span></div></div>
 
 <div class="mobile-bar">
   <button type="button" class="primary" id="mGenerate">Jana laporan</button>
@@ -856,6 +856,7 @@
   $('mCopy').addEventListener('click', () => $('copy').click());
 
   // ---------- APP PHONE (PWA) ----------
+  const APP_VERSION = '4.0.2'; // samakan dengan VERSION dalam sw.js
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
   let deferredPrompt = null;
@@ -890,13 +891,27 @@
   }
 
   if ('serviceWorker' in navigator && window.isSecureContext && location.protocol !== 'file:') {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    const adaVersiLama = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(reg => {
+        reg.update();
+        // Semak lagi bila app dibuka semula dari background (phone jarang tutup app sepenuhnya)
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+      })
+      .catch(() => {});
+    let dahReload = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!adaVersiLama || dahReload) return;
+      dahReload = true;
+      location.reload();
+    });
   }
   // Minta phone jangan padam data app ni bila storage penuh
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persisted().then(ok => { if (!ok) navigator.storage.persist().catch(() => {}); }).catch(() => {});
   }
-  if (standalone) $('versionInfo').textContent = 'Laporan Harian v4.0.1 · app';
+  document.querySelectorAll('.appVer').forEach(el => (el.textContent = APP_VERSION));
+  if (standalone) $('versionInfo').append(' · app');
 
   // ---------- INIT ----------
   if (!storageOK) $('storageWarn').hidden = false;

@@ -1,6 +1,6 @@
 // Service worker: app boleh dibuka tanpa internet, dan auto ambil versi baru bila online.
 // Tukar VERSION setiap kali upload fail baru supaya cache lama dibuang.
-const VERSION = 'v4.0.1';
+const VERSION = 'v4.0.2';
 const CACHE = 'laporan-harian-' + VERSION;
 const SHELL = [
   './',
@@ -34,7 +34,7 @@ self.addEventListener('fetch', event => {
   // Halaman utama: cuba internet dulu (dapat versi terbaru), kalau offline guna cache
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-store' }) // langkau cache browser supaya sentiasa dapat versi terbaru
         .then(res => { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./index.html', copy)); return res; })
         .catch(() => caches.match('./index.html'))
     );
